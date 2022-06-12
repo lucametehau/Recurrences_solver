@@ -39,32 +39,26 @@ using namespace std;
 mt19937 gen(time(0));
 uniform_int_distribution <uint32_t> rng;
 
-const int MOD = (int)1e9 + 7;
-
-template <int MOD>
-int lgput(int n, int p) {
-    int ans = 1, x = n;
-
-    while (p) {
-        if (p & 1)
-            ans = 1LL * ans * x % MOD;
-        x = 1LL * x * x % MOD;
-        p >>= 1;
-    }
-
-    return ans;
-}
-
-ll gcd(ll a, ll b) {
-    if (!b)
-        return a;
-    return gcd(b, a % b);
-}
+const int MOD = 998244353;
 
 // the following namespace includes many useful things
 // for solving linear recurrences
 
 namespace recurrences {
+    // binary exponentiation
+    template <int MOD>
+    int lgput(int n, int p) {
+        int ans = 1, x = n;
+
+        while (p) {
+            if (p & 1)
+                ans = 1LL * ans * x % MOD;
+            x = 1LL * x * x % MOD;
+            p >>= 1;
+        }
+
+        return ans;
+    }
 
     // modular integer class
     template <int MOD>
@@ -123,10 +117,35 @@ namespace recurrences {
             return x == other.x;
         }
 
+        bool operator != (const Int& other) const {
+            return x != other.x;
+        }
+
+        int pow(int p) const {
+            return lgput<MOD>(x, p);
+        }
+
         int inv() const {
             return lgput<MOD>(x, MOD - 2);
         }
     };
+
+    const bool slow_mult = false;
+
+    int primitive_root(int MOD) {
+        return 3; // 998244353 specific
+    }
+
+    int get_smallest_power(int n) {
+        int p = 1;
+        while (p < n)
+            p <<= 1;
+        return p;
+    }
+
+    bool calcW = true;
+
+    Int<MOD> valw[30], invvalw[30];
 
     // modular 
     template <typename T>
@@ -139,6 +158,10 @@ namespace recurrences {
 
         Poly(vector <T> values) {
             p = values;
+        }
+
+        Poly(int val) {
+            p = { val };
         }
 
         T &operator [] (int index) {
@@ -158,6 +181,18 @@ namespace recurrences {
             for (auto& i : P.p)
                 os << i << " ";
             return os;
+        }
+
+        bool operator == (const Poly& other) const {
+            if (deg() != other.deg())
+                return 0;
+
+            for (int i = 0; i <= deg(); i++) {
+                if (p[i] != other.p[i])
+                    return 0;
+            }
+
+            return 1;
         }
 
         Poly operator + (const Poly& other) const {
@@ -208,7 +243,13 @@ namespace recurrences {
 
         // scalar division
         Poly operator / (const T& other) const {
-            return *this * other.inv();
+            Poly mult(*this);
+            Int<MOD> val = other.inv();
+
+            for (auto& i : mult.p)
+                i *= val;
+
+            return mult;
         }
 
         // scalar division
@@ -216,27 +257,111 @@ namespace recurrences {
             return *this = *this / other;
         }
 
-        // multiplicates 2 polynomials
-        Poly operator * (const Poly& other) const {
-            Poly mult;
+        Poly fft(bool invert) {
+            Poly Ans(p);
 
-            mult.setDegree(deg() + other.deg());
+            Int<MOD> root(primitive_root(MOD));
 
-            for (int i = 0; i <= deg(); i++) {
-                for (int j = 0; j <= other.deg(); j++)
-                    mult[i + j] += p[i] * other.p[j];
+            if (calcW) {
+                calcW = false;
+
+                for (int i = 0; i < 30; i++) {
+                    valw[i] = root.pow((MOD - 1) >> (i + 1));
+                    invvalw[i] = valw[i].inv();
+                }
             }
 
-            return mult;
+            int ind = 0, n = deg();
+            for (int i = 1; i < n; i++) {
+                int b;
+                for (b = n / 2; ind & b; b >>= 1)
+                    ind ^= b;
+                ind ^= b;
+
+                if (i < ind)
+                    swap(Ans[i], Ans[ind]);
+            }
+
+            for (int l = 2, p = 0; l <= n; l <<= 1, p++) {
+                Int<MOD> bw(!invert ? valw[p] : invvalw[p]);
+
+                for (int i = 0; i < n; i += l) {
+                    Int<MOD> w(1);
+
+                    for (int j = 0; j < l / 2; j++) {
+                        int i1 = i + j, i2 = i + j + l / 2;
+                        Int<MOD> val1(Ans[i1]), val2(Ans[i2] * w);
+                        Ans[i1] = val1 + val2;
+                        Ans[i2] = val1 - val2;
+                        w *= bw;
+                    }
+                }
+            }
+
+            if (invert) {
+                Int<MOD> inv = Int<MOD>(n).inv();
+
+                for (int i = 0; i < n; i++)
+                    Ans[i] *= inv;
+            }
+
+            return Ans;
+        }
+
+        // multiplicates 2 polynomials
+        Poly operator * (const Poly& other) const {
+            if (slow_mult) {
+                Poly mult;
+                mult.setDegree(deg() + other.deg());
+
+                for (int i = 0; i <= deg(); i++) {
+                    for (int j = 0; j <= other.deg(); j++)
+                        mult[i + j] += p[i] * other.p[j];
+                }
+
+                return mult;
+            }
+            Poly A(p), B(other.p);
+
+            int sz = max(get_smallest_power(A.deg() + 1), get_smallest_power(B.deg() + 1)) * 2;
+
+            A.setDegree(sz), B.setDegree(sz);
+
+            A = A.fft(0);
+            B = B.fft(0);
+
+            for (int i = 0; i < sz; i++)
+                A[i] *= B[i];
+
+            A = A.fft(1);
+
+            A.setDegree(deg() + other.deg());
+
+            return A;
         }
 
         // p mod q
         Poly operator % (const Poly& other) const {
-            Poly R(p);
+            int d = deg() - other.deg();
 
-            for (int i = deg(); i >= other.deg(); i--) {
-                R -= (other * R[i] / other.p[other.deg()]).shift(i - other.deg());
+            if (d < 0)
+                return *this;
+
+            Poly A, B;
+
+            for (int i = 0; i <= d; i++) {
+                A.p.push_back(p[deg() - d + i]);
+                if (other.deg() - d + i >= 0)
+                    B.p.push_back(other.p[other.deg() - d + i]);
             }
+
+            Poly C = A * B.inverse(d);
+            C.setDegree(d);
+
+            for (int i = 0; i <= d / 2; i++)
+                swap(C[i], C[d - i]);
+
+            Poly R = *this - other * C;
 
             R.setDegree(other.deg() - 1);
 
@@ -280,16 +405,16 @@ namespace recurrences {
 
         // P^-1 mod x^n
         Poly inverse(int n) {
-            vector <Int<MOD>> v = { p[0].inv() };
-            Poly Inv(v);
+            Poly Inv(p[0].inv()), two(2);
 
             int power = 1;
 
             while ((power / 2) <= n) {
-                Poly A(p);
+                Poly A;
+                for (int i = 0; i <= power; i++)
+                    A.p.push_back((i <= deg() ? p[i] : 0));
 
-                A.setDegree(power);
-                Inv = Inv * Int<MOD>(2) - A * Inv * Inv;
+                Inv = Inv * (two - A * Inv);
                 Inv.setDegree(power);
 
                 power <<= 1;
@@ -310,8 +435,7 @@ namespace recurrences {
 
         // e^P mod x^n
         Poly exp(int n) {
-            vector <Int<MOD>> v = { Int<MOD>(1) };
-            Poly Exp(v);
+            Poly Exp(1);
 
             int power = 1;
 
@@ -329,8 +453,7 @@ namespace recurrences {
 
         // p^power mod mod, where mod is a polynomial
         Poly pow(uint64_t power, Poly mod) {
-            vector <Int<MOD>> v = { Int<MOD>(1) };
-            Poly Pow(v), X(p);
+            Poly Pow(1), X(p);
 
             while (power) {
                 if (power & 1)
@@ -343,13 +466,13 @@ namespace recurrences {
         }
     };
 
+    // berlekamp-massey algorithm
     template <int MOD>
     Poly<Int<MOD>> berlekamp_massey(vector <Int<MOD>> values) {
-        vector <Int<MOD>> v = { Int<MOD>(1) };
-        Poly<Int<MOD>> P(values), B, C;
+        Poly<Int<MOD>> P(values), B, C, Pol(-1);
         int n = values.size();
         int length = 0, lst = -1;
-        Int<MOD> zero(0);
+        Int<MOD> lstError;
 
         for (int i = 0; i < n; i++) {
             Int<MOD> error = P[i];
@@ -357,32 +480,35 @@ namespace recurrences {
             for (int j = 1; j <= C.deg() + 1; j++)
                 error -= C[j - 1] * P[i - j];
 
-            if (error == zero)
+            if (error == Int<MOD>(0))
                 continue;
 
             if (lst == -1) {
                 C = C.shift(i + 1);
                 lst = i;
+                lstError = P[i];
                 continue;
             }
 
-            Int<MOD> newError = P[lst];
-            Poly<Int<MOD>> Temp = B;
+            Poly<Int<MOD>> D = (Pol * error / lstError);
+            Poly<Int<MOD>> t = C;
 
-            for (int j = 1; j <= Temp.deg() + 1; j++)
-                newError -= Temp[j - 1] * P[lst - j];
+            // instead of shifting D with i - lst - 1 positions
+            // do the substraction on the last D.deg() coeficients
+            C.setDegree(max(C.deg(), i - lst - 1 + D.deg()));
+            for (int j = 0; j <= D.deg(); j++)
+                C[j + i - lst - 1] -= D[j];
 
-            Temp = Temp.shift(1);
-            Temp[0] = Int<MOD>(-1);
-
-            Poly<Int<MOD>> D = (Temp * error / newError).shift(i - lst - 1);
-
-            if (i - C.deg() > lst - B.deg()) {
-                B = C;
+            if (i - t.deg() > lst - B.deg()) {
+                B = t;
+                Pol = B;
+                Pol = Pol.shift(1);
+                Pol[0] = Int<MOD>(-1);
                 lst = i;
+                lstError = error;
             }
 
-            C -= D;
+            //C -= D;
         }
 
         return C;
@@ -390,10 +516,15 @@ namespace recurrences {
     
     // find kth term based on terms of recurrence
     // assuming first term has index 1
+    template <int MOD>
     Int<MOD> kth_term(vector <Int<MOD>> v, uint64_t k) { 
         vector <Int<MOD>> x = { Int<MOD>(0), Int<MOD>(1) };
+        ld t1 = clock();
         Poly<Int<MOD>> CP = berlekamp_massey<MOD>(v);
+        ld t2 = clock();
         Poly<Int<MOD>> X(x);
+
+        cout << (t2 - t1) / CLOCKS_PER_SEC << "s for berlekamp-massey\n";
 
         // characteristic polynomial is of form
         // x^n - sigma(i = 1..n, c[i] * x^(n-i))
@@ -401,9 +532,9 @@ namespace recurrences {
         // from berlekamp-massey
 
         CP *= Int<MOD>(-1);
+        CP.shift(1);
         for (int i = 0; i <= CP.deg() / 2; i++)
             swap(CP[i], CP[CP.deg() - i]);
-        CP.setDegree(CP.deg() + 1);
         CP[CP.deg()] = 1;
 
         X = X.pow(k - 1, CP);
@@ -416,6 +547,7 @@ namespace recurrences {
         return term;
     }
 
+    template <int MOD>
     void berlekamp_massey_test() {
         int n;
         vector<Int<MOD>> v;
@@ -427,30 +559,35 @@ namespace recurrences {
             v.push_back(x);
         }
 
-        Poly<Int<MOD>> p = berlekamp_massey<MOD>(v);
-
-        cout << "x(n) = ";
-
-        for (int i = 0; i <= p.deg(); i++)
-            cout << "x(n-" << i + 1 << ") * " << p[i] << (i == p.deg() ? "" : " + ");
-        cout << "\n";
-
-        for (int i = p.deg() + 1; i < v.size(); i++) {
-            Int<MOD> ans(0);
-
-            for (int j = i - p.deg() - 1; j < i; j++) {
-                ans += p[i - j - 1] * v[j];
-            }
-
-            assert(ans == v[i]);
-        }
-
         uint64_t k;
         cin >> k;
-
-        cout << kth_term(v, k) << "\n";
+        cout << kth_term<MOD>(v, k) << "\n";
     }
 
+    template <int MOD>
+    void berlekamp_massey_speed_test() {
+        int n;
+        vector<Int<MOD>> v;
+
+        n = 1000;
+        for (int i = 0; i < n; i++) {
+            int x;
+            //cin >> x;
+            x = rng(gen);
+            v.push_back(x);
+        }
+
+        ld t1 = clock();
+
+        for (int k = 1; k <= 20; k++)
+            kth_term<MOD>(v, k);
+
+        ld t2 = clock();
+
+        cout << (t2 - t1) / CLOCKS_PER_SEC << "s\n";
+    }
+
+    template <int MOD>
     void inverse_test() {
         int n;
         cin >> n;
@@ -481,8 +618,9 @@ namespace recurrences {
 };
 
 void solve() {
-    recurrences::berlekamp_massey_test();
-    //recurrences::inverse_test();
+    recurrences::berlekamp_massey_test<MOD>();
+    //recurrences::berlekamp_massey_speed_test<MOD>();
+    //recurrences::inverse_test<MOD>();
 }
 
 int main() {
