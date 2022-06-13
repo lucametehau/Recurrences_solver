@@ -77,7 +77,7 @@ namespace recurrences {
             x = _x;
         }
 
-        friend ostream& operator << (ostream& os, const Int &X) {
+        friend ostream& operator << (ostream& os, const Int& X) {
             os << (false ? X.x - MOD : X.x);
             return os;
         }
@@ -131,9 +131,35 @@ namespace recurrences {
     };
 
     const bool slow_mult = false;
+    bool calcPrimitve = true;
+    int root;
 
-    int primitive_root(int MOD) {
-        return 3; // 998244353 specific
+    int primitive_root(int p) {
+        if (!calcPrimitve) {
+            return root;
+        }
+
+        vector<int> fact;
+        int phi = p - 1, n = phi;
+        for (int i = 2; i * i <= n; ++i)
+            if (n % i == 0) {
+                fact.push_back(i);
+                while (n % i == 0)
+                    n /= i;
+            }
+        if (n > 1)
+            fact.push_back(n);
+
+        for (int res = 2; res <= p; ++res) {
+            bool ok = true;
+            for (size_t i = 0; i < fact.size() && ok; ++i)
+                ok &= lgput<MOD>(res, phi / fact[i]) != 1;
+            if (ok) {
+                root = res;
+                return res;
+            }
+        }
+        return -1;
     }
 
     int get_smallest_power(int n) {
@@ -164,7 +190,7 @@ namespace recurrences {
             p = { val };
         }
 
-        T &operator [] (int index) {
+        T& operator [] (int index) {
             assert(index < (int)p.size());
             return p[index];
         }
@@ -177,7 +203,7 @@ namespace recurrences {
             return p.size() - 1;
         }
 
-        friend ostream& operator << (ostream &os, const Poly &P) {
+        friend ostream& operator << (ostream& os, const Poly& P) {
             for (auto& i : P.p)
                 os << i << " ";
             return os;
@@ -310,7 +336,7 @@ namespace recurrences {
 
         // multiplies 2 polynomials
         Poly operator * (const Poly& other) const {
-            if (deg() * other.deg() <= 200) { // for small sizes, use naive multiplication
+            if (!root) { // for small sizes, use naive multiplication
                 Poly mult;
                 mult.setDegree(deg() + other.deg());
 
@@ -347,27 +373,28 @@ namespace recurrences {
             if (d < 0)
                 return *this;
 
-            if (d <= 10) {
-                Poly R(p);
-
+            if (false) {
+                Poly R2(p);
                 for (int i = deg(); i >= other.deg(); i--) {
-                    R -= (other * R[i] / other.p[other.deg()]).shift(i - other.deg());
+                    R2 -= (other * R2[i] / other.p[other.deg()]).shift(i - other.deg());
                 }
 
-                R.setDegree(other.deg() - 1);
+                R2.setDegree(other.deg() - 1);
 
-                return R;
+                //return R;
             }
 
-            Poly A, B;
+            Poly A, B = other;
 
             for (int i = 0; i <= d; i++) {
-                A.p.push_back(p[deg() - d + i]);
-                if (other.deg() - d + i >= 0)
-                    B.p.push_back(other.p[other.deg() - d + i]);
+                A.p.push_back(p[deg() - i]);
             }
 
+            for (int i = 0; i <= B.deg() / 2; i++)
+                swap(B[i], B[B.deg() - i]);
+
             Poly C = A * B.inverse(d);
+
             C.setDegree(d);
 
             for (int i = 0; i <= d / 2; i++)
@@ -527,24 +554,23 @@ namespace recurrences {
 
         return C;
     }
-    
+
     // find kth term based on terms of recurrence
     // assuming first term has index 1
     template <int MOD>
-    Int<MOD> kth_term(vector <Int<MOD>> v, uint64_t k) { 
+    Int<MOD> kth_term(vector <Int<MOD>> v, uint64_t k) {
         vector <Int<MOD>> x = { Int<MOD>(0), Int<MOD>(1) };
         Poly<Int<MOD>> CP = berlekamp_massey<MOD>(v);
         Poly<Int<MOD>> X(x);
 
         /*CP.setDegree(100000);
-
         for (int i = 0; i <= 100000; i++)
             CP[i] = Int<MOD>(rng(gen));*/
 
-        // characteristic polynomial is of form
-        // x^n - sigma(i = 1..n, c[i] * x^(n-i))
-        // that's why we need to reverse the recurrence
-        // from berlekamp-massey
+            // characteristic polynomial is of form
+            // x^n - sigma(i = 1..n, c[i] * x^(n-i))
+            // that's why we need to reverse the recurrence
+            // from berlekamp-massey
 
         CP *= Int<MOD>(-1);
         CP = CP.shift(1);
@@ -585,7 +611,7 @@ namespace recurrences {
                 val += v[i - 1] * rec[k - 1 - i];
 
             assert(val == kth_term(v, k));
-            if(k > n)
+            if (k > n)
                 v.push_back(val);
         }
 
@@ -649,7 +675,7 @@ namespace recurrences {
 
 void solve() {
     //recurrences::berlekamp_massey_test<MOD>();
-    recurrences::berlekamp_massey_speed_test<MOD>();
+    //recurrences::berlekamp_massey_speed_test<MOD>();
     //recurrences::inverse_test<MOD>();
 }
 
