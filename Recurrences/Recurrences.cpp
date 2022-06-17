@@ -131,14 +131,8 @@ namespace recurrences {
     };
 
     const bool slow_mult = false;
-    bool calcPrimitve = true;
-    int root;
 
-    int primitive_root(int p) {
-        if (!calcPrimitve) {
-            return root;
-        }
-
+    int get_primitive_root(int p) {
         vector<int> fact;
         int phi = p - 1, n = phi;
         for (int i = 2; i * i <= n; ++i)
@@ -155,12 +149,13 @@ namespace recurrences {
             for (size_t i = 0; i < fact.size() && ok; ++i)
                 ok &= lgput<MOD>(res, phi / fact[i]) != 1;
             if (ok) {
-                root = res;
                 return res;
             }
         }
         return -1;
     }
+
+    int primitive_root = get_primitive_root(MOD);
 
     int get_smallest_power(int n) {
         int p = 1;
@@ -286,7 +281,7 @@ namespace recurrences {
         Poly fft(bool invert) {
             Poly Ans(p);
 
-            Int<MOD> root(primitive_root(MOD));
+            Int<MOD> root(primitive_root);
 
             if (calcW) {
                 calcW = false;
@@ -336,7 +331,7 @@ namespace recurrences {
 
         // multiplies 2 polynomials
         Poly operator * (const Poly& other) const {
-            if (!root) { // for small sizes, use naive multiplication
+            if (!primitive_root) { // for small sizes, use naive multiplication
                 Poly mult;
                 mult.setDegree(deg() + other.deg());
 
@@ -563,14 +558,10 @@ namespace recurrences {
         Poly<Int<MOD>> CP = berlekamp_massey<MOD>(v);
         Poly<Int<MOD>> X(x);
 
-        /*CP.setDegree(100000);
-        for (int i = 0; i <= 100000; i++)
-            CP[i] = Int<MOD>(rng(gen));*/
-
-            // characteristic polynomial is of form
-            // x^n - sigma(i = 1..n, c[i] * x^(n-i))
-            // that's why we need to reverse the recurrence
-            // from berlekamp-massey
+        // characteristic polynomial is of form
+        // x^n - sigma(i = 1..n, c[i] * x^(n-i))
+        // that's why we need to reverse the recurrence
+        // from berlekamp-massey
 
         CP *= Int<MOD>(-1);
         CP = CP.shift(1);
@@ -674,7 +665,7 @@ namespace recurrences {
 };
 
 void solve() {
-    //recurrences::berlekamp_massey_test<MOD>();
+    recurrences::berlekamp_massey_test<MOD>();
     //recurrences::berlekamp_massey_speed_test<MOD>();
     //recurrences::inverse_test<MOD>();
 }
